@@ -1,0 +1,19 @@
+---
+description: Timestamp-driven timer and lifecycle state correctness for iOS code
+globs: "**/*.{swift}"
+alwaysApply: false
+---
+
+# iOS Session State Rule
+
+- Derive state from persisted timestamps and current time.
+- Reconcile state when app becomes active or relaunches.
+- Treat app background during focus window as destabilization event.
+- Never use notification fire-time as source of truth.
+- Ensure reconciliation logic is idempotent and deterministic.
+
+# Required Engineering Patterns
+
+- Persist transition timestamps atomically.
+- Inject clock/time provider for testability.
+- Cover delayed notification and lifecycle churn in tests.

@@ -1,0 +1,18 @@
+---
+description: Enforce Pulsar MVP product and behavior guardrails
+alwaysApply: true
+---
+
+# Pulsar MVP Guardrails
+
+- Build for iPhone-first focus sessions where leaving app during focus destabilizes session.
+- Keep break flow permissive and return flow intentional.
+- Never auto-start focus after break completion.
+- Treat notifications as supportive nudges, not enforcement.
+- Keep implementation aligned with guest mode and local-first storage.
+- Reject or defer out-of-scope features (accounts, sync, desktop companion, task AI).
+
+# Decision Priority
+
+When trade-offs appear, prioritize:
+1) behavior correctness, 2) user agency, 3) emotional tone, 4) implementation simplicity.
