@@ -8,6 +8,7 @@ This folder is the shared source of truth for product intent, constraints, and i
 - `product/ux-principles.md`: Behavioral design principles and notification tone.
 - `engineering/state-machine.md`: Canonical session state machine and timestamp reconciliation.
 - `engineering/implementation-standards.md`: Engineering standards for iOS MVP delivery.
+- `engineering/pulsar-tech-stack-cursor.md`: Recommended stack, environments, and implementation workflow.
 
 ## How Agents Should Use This
 
