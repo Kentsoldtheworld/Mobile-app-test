@@ -2,6 +2,8 @@
 
 This folder is the shared source of truth for product intent, constraints, and implementation behavior.
 
+The Expo + React Native app lives in the `pulsar/` directory at the repository root.
+
 ## Structure
 
 - `product/prd.md`: Product requirements and MVP scope.

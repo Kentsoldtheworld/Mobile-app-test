@@ -1,0 +1,4 @@
+# Portable toolchain (not committed; use Homebrew/global Node if preferred)
+.tools/
+
+.DS_Store

@@ -1,0 +1,14 @@
+---
+description: Timestamp-driven Pulsar session rules for Expo TypeScript code
+globs: "pulsar/**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Pulsar session logic (Expo / TypeScript)
+
+- Derive visible phase from persisted timestamps plus `Date.now()`; never from notification delivery time.
+- Run reconciliation when the app returns to `active` and after storage hydration.
+- Treat `expo-notifications` as side effects only; cancellations must not define truth state.
+- Do not auto-start the next focus session after a break completes; require explicit user action.
+- During `focus_active`, leaving `AppState` `active` destabilizes the session per PRD.
+- Keep domain math pure (no React) and cover edge cases with unit tests.
