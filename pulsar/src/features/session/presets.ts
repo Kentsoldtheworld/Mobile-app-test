@@ -1,4 +1,4 @@
-export type PresetId = 'pomodoro' | 'long' | 'custom';
+export type PresetId = 'frequent' | 'balanced' | 'minimal';
 
 export type SessionPreset = {
   id: PresetId;
@@ -7,25 +7,23 @@ export type SessionPreset = {
   breakDurationMs: number;
 };
 
-export const PRESETS: Record<'pomodoro' | 'long', SessionPreset> = {
-  pomodoro: {
-    id: 'pomodoro',
-    label: '25 / 5',
-    focusDurationMs: 25 * 60 * 1000,
+export const PRESETS: Record<PresetId, SessionPreset> = {
+  frequent: {
+    id: 'frequent',
+    label: 'Frequent breaks',
+    focusDurationMs: 10 * 60 * 1000,
     breakDurationMs: 5 * 60 * 1000,
   },
-  long: {
-    id: 'long',
-    label: '50 / 10',
-    focusDurationMs: 50 * 60 * 1000,
-    breakDurationMs: 10 * 60 * 1000,
+  balanced: {
+    id: 'balanced',
+    label: 'Balanced breaks',
+    focusDurationMs: 20 * 60 * 1000,
+    breakDurationMs: 5 * 60 * 1000,
   },
-};
-
-/** Plumbing default for “Custom” until a picker exists */
-export const CUSTOM_PLACEHOLDER_PRESET: SessionPreset = {
-  id: 'custom',
-  label: 'Custom (30 / 5)',
-  focusDurationMs: 30 * 60 * 1000,
-  breakDurationMs: 5 * 60 * 1000,
+  minimal: {
+    id: 'minimal',
+    label: 'Minimal breaks',
+    focusDurationMs: 30 * 60 * 1000,
+    breakDurationMs: 5 * 60 * 1000,
+  },
 };

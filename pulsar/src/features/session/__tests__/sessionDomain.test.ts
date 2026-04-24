@@ -66,7 +66,7 @@ describe('startNextSessionAfterCompleted', () => {
     const next = startNextSessionAfterCompleted(t0 + 3_000, session, {
       focusDurationMs: 2_000,
       breakDurationMs: 500,
-      presetId: 'pomodoro',
+      presetId: 'frequent',
     });
     expect(next).not.toBeNull();
     expect(next!.state).toBe('focus_active');

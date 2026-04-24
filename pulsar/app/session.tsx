@@ -57,10 +57,10 @@ export default function SessionScreen() {
         <GhostButton title="Reset to idle" onPress={() => reset()} style={styles.gap} />
         {session.state === 'completed' ? (
           <PrimaryButton
-            title="Start next (25 / 5)"
+            title="Start next (Frequent breaks)"
             style={styles.gap}
             onPress={() => {
-              startNext('pomodoro');
+              startNext('frequent');
             }}
           />
         ) : null}

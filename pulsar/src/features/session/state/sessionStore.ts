@@ -9,19 +9,20 @@ import { createFocusSession, startNextSessionAfterCompleted } from '@/src/featur
 import type { PulsarSession, SessionHistoryRecord } from '@/src/features/session/domain/types';
 import { IDLE_SESSION, breakEndsAt } from '@/src/features/session/domain/types';
 import * as NotificationService from '@/src/features/session/notifications/notificationService';
-import { CUSTOM_PLACEHOLDER_PRESET, PRESETS, type PresetId } from '@/src/features/session/presets';
+import { PRESETS, type PresetId } from '@/src/features/session/presets';
 
 export type SessionSlice = {
   hasSeenWelcome: boolean;
   session: PulsarSession;
   history: SessionHistoryRecord[];
   setHasSeenWelcome: (v: boolean) => void;
-  startSessionFromPreset: (presetId: Exclude<PresetId, 'custom'>) => void;
-  startSessionCustomPlaceholder: () => void;
+  startSessionFromPreset: (presetId: PresetId) => void;
+  /** Whole minutes; persisted session uses ms with presetId `custom`. */
+  startSessionCustomMinutes: (focusMinutes: number, breakMinutes: number) => void;
   reconcile: () => void;
   onLeaveActiveDuringFocus: () => void;
   resetSessionToIdle: () => void;
-  startNextSessionAfterCompletedFlow: (presetId: Exclude<PresetId, 'custom'>) => void;
+  startNextSessionAfterCompletedFlow: (presetId: PresetId) => void;
 };
 
 function syncNotificationsForSession(session: PulsarSession) {
@@ -62,13 +63,16 @@ export const useSessionStore = create<SessionSlice>()(
         void NotificationService.ensureNotificationPermission();
       },
 
-      startSessionCustomPlaceholder: () => {
-        const p = CUSTOM_PLACEHOLDER_PRESET;
+      startSessionCustomMinutes: (focusMinutes, breakMinutes) => {
+        const focusM = Math.round(focusMinutes);
+        const breakM = Math.round(breakMinutes);
+        const focusClamped = Math.min(240, Math.max(1, focusM));
+        const breakClamped = Math.min(120, Math.max(1, breakM));
         const now = Date.now();
         const session = createFocusSession(now, {
-          focusDurationMs: p.focusDurationMs,
-          breakDurationMs: p.breakDurationMs,
-          presetId: p.id,
+          focusDurationMs: focusClamped * 60 * 1000,
+          breakDurationMs: breakClamped * 60 * 1000,
+          presetId: 'custom',
         });
         set({ session });
         void NotificationService.cancelAllPulsarNotifications();
