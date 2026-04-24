@@ -9,33 +9,53 @@ import { createFocusSession, startNextSessionAfterCompleted } from '@/src/featur
 import type { PulsarSession, SessionHistoryRecord } from '@/src/features/session/domain/types';
 import { IDLE_SESSION, breakEndsAt } from '@/src/features/session/domain/types';
 import * as NotificationService from '@/src/features/session/notifications/notificationService';
-import { PRESETS, type PresetId } from '@/src/features/session/presets';
+import { GRACE_PERIOD_MS } from '@/src/features/session/notifications/notificationService';
 
 export type SessionSlice = {
   hasSeenWelcome: boolean;
   session: PulsarSession;
   history: SessionHistoryRecord[];
+  /** In-memory only — tracks when the user backgrounded the app during focus. */
+  backgroundedAt: number | null;
   setHasSeenWelcome: (v: boolean) => void;
-  startSessionFromPreset: (presetId: PresetId) => void;
-  /** Whole minutes; persisted session uses ms with presetId `custom`. */
+  startSessionFromPreset: (presetId: string, focusMinutes: number, breakMinutes: number) => void;
+  /** Whole minutes; persisted session uses ms. */
   startSessionCustomMinutes: (focusMinutes: number, breakMinutes: number) => void;
+  /** Called when focus timer elapses and user taps "Start break". */
+  startBreak: () => void;
+  /** Called when user confirms X exit during focus — immediately begins break. */
+  skipToBreak: () => void;
   reconcile: () => void;
-  onLeaveActiveDuringFocus: () => void;
+  /** Called when the app is backgrounded. Starts grace period if focusing, schedules break-end alarm if on break. */
+  onAppBackground: () => void;
+  /** Called when the app returns to foreground. Resumes or destabilizes based on elapsed time. */
+  onReturnFromBackground: () => void;
   resetSessionToIdle: () => void;
-  startNextSessionAfterCompletedFlow: (presetId: PresetId) => void;
+  /** Starts a new focus round using the same durations as the completed session. */
+  startNextRound: () => void;
 };
 
-function syncNotificationsForSession(session: PulsarSession) {
+/**
+ * Only cancels stale notifications when state changes.
+ * Background-only notifications (focus-complete, break-end) are scheduled
+ * in onAppBackground so they never fire while the app is open.
+ */
+function cancelStaleNotifications(session: PulsarSession) {
   void (async () => {
-    const ok = await NotificationService.ensureNotificationPermission();
-    if (!ok) return;
     if (session.state === 'break_active') {
-      const end = breakEndsAt(session);
-      if (end != null) await NotificationService.scheduleBreakCompleteNotification(end);
-    } else {
-      await NotificationService.cancelBreakEndNotification();
-      if (session.state !== 'destabilized') {
-        await NotificationService.cancelDestabilizeNotification();
+      // Entering break — cancel any leftover focus/grace notifications
+      await NotificationService.cancelFocusCompleteNotification();
+      await NotificationService.cancelGraceNotifications();
+    } else if (
+      session.state === 'idle' ||
+      session.state === 'focus_complete' ||
+      session.state === 'completed' ||
+      session.state === 'destabilized'
+    ) {
+      await NotificationService.cancelAllPulsarNotifications();
+      if (session.state === 'destabilized') {
+        const granted = await NotificationService.ensureNotificationPermission();
+        if (granted) void NotificationService.scheduleDestabilizationNudge();
       }
     }
   })();
@@ -47,36 +67,53 @@ export const useSessionStore = create<SessionSlice>()(
       hasSeenWelcome: false,
       session: IDLE_SESSION,
       history: [],
+      backgroundedAt: null,
 
       setHasSeenWelcome: (v) => set({ hasSeenWelcome: v }),
 
-      startSessionFromPreset: (presetId) => {
-        const preset = PRESETS[presetId];
+      startSessionFromPreset: (_presetId, focusMinutes, breakMinutes) => {
         const now = Date.now();
         const session = createFocusSession(now, {
-          focusDurationMs: preset.focusDurationMs,
-          breakDurationMs: preset.breakDurationMs,
-          presetId: preset.id,
+          focusDurationMs: focusMinutes * 60 * 1000,
+          breakDurationMs: breakMinutes * 60 * 1000,
         });
-        set({ session });
+        set({ session, backgroundedAt: null });
         void NotificationService.cancelAllPulsarNotifications();
-        void NotificationService.ensureNotificationPermission();
       },
 
       startSessionCustomMinutes: (focusMinutes, breakMinutes) => {
-        const focusM = Math.round(focusMinutes);
-        const breakM = Math.round(breakMinutes);
-        const focusClamped = Math.min(240, Math.max(1, focusM));
-        const breakClamped = Math.min(120, Math.max(1, breakM));
+        const focusClamped = Math.min(240, Math.max(1, Math.round(focusMinutes)));
+        const breakClamped = Math.min(120, Math.max(1, Math.round(breakMinutes)));
         const now = Date.now();
         const session = createFocusSession(now, {
           focusDurationMs: focusClamped * 60 * 1000,
           breakDurationMs: breakClamped * 60 * 1000,
-          presetId: 'custom',
         });
-        set({ session });
+        set({ session, backgroundedAt: null });
         void NotificationService.cancelAllPulsarNotifications();
-        void NotificationService.ensureNotificationPermission();
+      },
+
+      startBreak: () => {
+        const now = Date.now();
+        set((state) => {
+          const { session } = state;
+          if (session.state !== 'focus_complete') return state;
+          return { session: { ...session, state: 'break_active', breakStartedAt: now } };
+        });
+        cancelStaleNotifications(get().session);
+      },
+
+      skipToBreak: () => {
+        const now = Date.now();
+        set((state) => {
+          const { session } = state;
+          if (session.state !== 'focus_active') return state;
+          return {
+            session: { ...session, state: 'break_active', breakStartedAt: now },
+            backgroundedAt: null,
+          };
+        });
+        cancelStaleNotifications(get().session);
       },
 
       reconcile: () => {
@@ -90,44 +127,75 @@ export const useSessionStore = create<SessionSlice>()(
           }
           return { session: next, history };
         });
-        syncNotificationsForSession(get().session);
+        cancelStaleNotifications(get().session);
       },
 
-      onLeaveActiveDuringFocus: () => {
-        const now = Date.now();
-        set((state) => {
-          const res = destabilizeOnFocusExit(now, state.session);
-          if (!res.ok) return state;
-          const next = res.session;
-          const history = [...state.history, buildHistoryRecord(next, 'destabilized')];
-          return { session: next, history };
-        });
-        const s = get().session;
-        if (s.state === 'destabilized') {
-          void NotificationService.cancelBreakEndNotification();
-          void NotificationService.ensureNotificationPermission().then((ok) => {
-            if (ok) void NotificationService.scheduleDestabilizationNudge();
-          });
+      onAppBackground: () => {
+        const { session } = get();
+        void (async () => {
+          const granted = await NotificationService.ensureNotificationPermission();
+          if (!granted) return;
+
+          if (session.state === 'focus_active') {
+            // Start grace period: warn immediately, expire after 60s
+            const now = Date.now();
+            set({ backgroundedAt: now });
+            await NotificationService.scheduleGraceNotifications();
+          } else if (session.state === 'break_active') {
+            // Schedule break-end alarm only now that user has left the app
+            const breakEnd = breakEndsAt(session);
+            if (breakEnd != null) {
+              await NotificationService.scheduleBreakCompleteNotification(breakEnd);
+            }
+          }
+        })();
+      },
+
+      onReturnFromBackground: () => {
+        const { backgroundedAt, session } = get();
+
+        // Cancel any background-only notifications — in-app alarm handles foreground
+        void NotificationService.cancelBreakEndNotification();
+
+        if (backgroundedAt != null && session.state === 'focus_active') {
+          const elapsed = Date.now() - backgroundedAt;
+          void NotificationService.cancelGraceNotifications();
+          set({ backgroundedAt: null });
+
+          if (elapsed >= GRACE_PERIOD_MS) {
+            const now = Date.now();
+            set((state) => {
+              const res = destabilizeOnFocusExit(now, state.session);
+              if (!res.ok) return state;
+              const next = res.session;
+              const history = [...state.history, buildHistoryRecord(next, 'destabilized')];
+              return { session: next, history };
+            });
+            cancelStaleNotifications(get().session);
+            return;
+          }
         }
+
+        set({ backgroundedAt: null });
+        get().reconcile();
       },
 
       resetSessionToIdle: () => {
-        set({ session: IDLE_SESSION });
+        set({ session: IDLE_SESSION, backgroundedAt: null });
         void NotificationService.cancelAllPulsarNotifications();
       },
 
-      startNextSessionAfterCompletedFlow: (presetId) => {
+      startNextRound: () => {
         const prev = get().session;
-        const preset = PRESETS[presetId];
+        if (prev.state !== 'completed') return;
         const next = startNextSessionAfterCompleted(Date.now(), prev, {
-          focusDurationMs: preset.focusDurationMs,
-          breakDurationMs: preset.breakDurationMs,
-          presetId: preset.id,
+          focusDurationMs: prev.focusDurationMs,
+          breakDurationMs: prev.breakDurationMs,
+          presetId: prev.presetId,
         });
         if (!next) return;
-        set({ session: next });
+        set({ session: next, backgroundedAt: null });
         void NotificationService.cancelAllPulsarNotifications();
-        void NotificationService.ensureNotificationPermission();
       },
     }),
     {
@@ -137,6 +205,8 @@ export const useSessionStore = create<SessionSlice>()(
         hasSeenWelcome: s.hasSeenWelcome,
         session: s.session,
         history: s.history,
+        // backgroundedAt is intentionally NOT persisted — if the app is killed
+        // during the grace window, a fresh open should just reconcile normally.
       }),
       version: 1,
     }

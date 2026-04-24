@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BalanceBar } from '@/src/components/BalanceBar';
+import { DurationSlider } from '@/src/components/DurationSlider';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { Screen } from '@/src/components/Screen';
 import { PRESETS, type PresetId } from '@/src/features/session/presets';
@@ -11,120 +11,123 @@ import { colors, radii, space } from '@/src/theme/tokens';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 const PRESET_ORDER: PresetId[] = ['frequent', 'balanced', 'minimal'];
-const ROUND_MIN = 10;
-const ROUND_MAX = 120;
-const ROUND_STEP = 5;
-const ROTATIONS_MIN = 1;
-const ROTATIONS_MAX = 8;
-const RATIO_MIN = 0.1;
-const RATIO_MAX = 0.92;
+const CYCLES_MIN = 1;
+const CYCLES_MAX = 8;
+const BLOCK_MIN = 8;  // px — square size at small counts
+const BLOCK_MAX = 13; // px — square size at small counts
 
-// ─── stepper ─────────────────────────────────────────────────────────────────
-type StepperRowProps = {
-  label: string;
-  value: string;
-  onDec: () => void;
-  onInc: () => void;
-  decDisabled?: boolean;
-  incDisabled?: boolean;
-};
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function matchPreset(focus: number, brk: number): PresetId | null {
+  for (const id of PRESET_ORDER) {
+    const p = PRESETS[id];
+    if (
+      Math.round(p.focusDurationMs / 60000) === focus &&
+      Math.round(p.breakDurationMs / 60000) === brk
+    ) return id;
+  }
+  return null;
+}
 
-function StepperRow({ label, value, onDec, onInc, decDisabled, incDisabled }: StepperRowProps) {
+// ─── session grid ─────────────────────────────────────────────────────────────
+function SessionGrid({ focusMin, breakMin, cycles }: { focusMin: number; breakMin: number; cycles: number }) {
+  const focusBlocks = Math.max(1, Math.round(focusMin / 5));
+  const breakBlocks = Math.max(1, Math.round(breakMin / 5));
+  const perCycle = focusBlocks + breakBlocks;
+  const total = perCycle * cycles;
+
+  // Scale tile size down when there are lots of blocks
+  const tileSize = total > 36 ? BLOCK_MIN : BLOCK_MAX;
+  const gap = 3;
+
+  const tiles = useMemo(() => {
+    const arr: { isFocus: boolean }[] = [];
+    for (let c = 0; c < cycles; c++) {
+      for (let f = 0; f < focusBlocks; f++) arr.push({ isFocus: true });
+      for (let b = 0; b < breakBlocks; b++) arr.push({ isFocus: false });
+    }
+    return arr;
+  }, [focusBlocks, breakBlocks, cycles]);
+
   return (
-    <View style={s.stepperRow}>
-      <Text style={s.stepperLabel}>{label}</Text>
-      <View style={s.stepperControls}>
-        <Pressable
-          onPress={onDec}
-          disabled={decDisabled}
-          accessibilityRole="button"
-          style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed, decDisabled && s.stepBtnDisabled]}>
-          <Text style={s.stepBtnText}>−</Text>
-        </Pressable>
-        <Text style={s.stepperValue}>{value}</Text>
-        <Pressable
-          onPress={onInc}
-          disabled={incDisabled}
-          accessibilityRole="button"
-          style={({ pressed }) => [s.stepBtn, pressed && s.stepBtnPressed, incDisabled && s.stepBtnDisabled]}>
-          <Text style={s.stepBtnText}>+</Text>
-        </Pressable>
+    <View>
+      <View style={s.gridRow}>
+        {tiles.map((tile, i) => (
+          <View
+            key={i}
+            style={[
+              s.tile,
+              {
+                width: tileSize,
+                height: tileSize,
+                borderRadius: 3,
+                marginRight: gap,
+                marginBottom: gap,
+              },
+              tile.isFocus ? s.tileFocus : s.tileBreak,
+            ]}
+          />
+        ))}
+      </View>
+      <View style={s.gridLegend}>
+        <View style={s.legendItem}>
+          <View style={[s.legendDot, s.tileFocus]} />
+          <Text style={s.legendText}>Focus ({focusBlocks * 5}m)</Text>
+        </View>
+        <View style={s.legendItem}>
+          <View style={[s.legendDot, s.tileBreak]} />
+          <Text style={s.legendText}>Break ({breakBlocks * 5}m)</Text>
+        </View>
+        {cycles > 1 && (
+          <Text style={s.legendTotal}>
+            {focusMin * cycles}m focus · {breakMin * cycles}m break total
+          </Text>
+        )}
       </View>
     </View>
   );
 }
 
 // ─── screen ──────────────────────────────────────────────────────────────────
-type ModeSelection = { kind: 'preset'; id: PresetId } | { kind: 'custom' };
-
 export default function ModesScreen() {
   const router = useRouter();
-  const startPreset = useSessionStore((st) => st.startSessionFromPreset);
   const startCustomMinutes = useSessionStore((st) => st.startSessionCustomMinutes);
 
-  const [selectedMode, setSelectedMode] = useState<ModeSelection>({ kind: 'preset', id: 'balanced' });
-  // Custom state: total minutes per round + focus ratio
-  const [roundMinutes, setRoundMinutes] = useState(30);
-  const [focusRatio, setFocusRatio] = useState(0.83);
-  const [rotations, setRotations] = useState(1);
+  const [focusMin, setFocusMin] = useState(20);
+  const [breakMin, setBreakMin] = useState(5);
+  const [cycles, setCycles] = useState(1);
 
-  // Derive focus/break from round + ratio
-  const customFocus = Math.max(1, Math.min(roundMinutes - 1, Math.round(roundMinutes * focusRatio)));
-  const customBreak = roundMinutes - customFocus;
+  const activePreset = matchPreset(focusMin, breakMin);
 
-  // What the bar currently shows
-  const previewFocus =
-    selectedMode.kind === 'custom'
-      ? customFocus
-      : Math.round(PRESETS[selectedMode.id].focusDurationMs / 60000);
-  const previewBreak =
-    selectedMode.kind === 'custom'
-      ? customBreak
-      : Math.round(PRESETS[selectedMode.id].breakDurationMs / 60000);
-
-  // Seamlessly seed custom values from the current preset before switching
-  const activateCustom = () => {
-    if (selectedMode.kind !== 'custom') {
-      const pf = Math.round(PRESETS[selectedMode.id].focusDurationMs / 60000);
-      const pb = Math.round(PRESETS[selectedMode.id].breakDurationMs / 60000);
-      const total = pf + pb;
-      setRoundMinutes(Math.max(ROUND_MIN, Math.min(ROUND_MAX, total)));
-      setFocusRatio(Math.max(RATIO_MIN, Math.min(RATIO_MAX, pf / total)));
-      setSelectedMode({ kind: 'custom' });
-    }
-  };
-
-  const onBarDrag = (ratio: number) => {
-    activateCustom();
-    setFocusRatio(ratio);
+  const applyPreset = (id: PresetId) => {
+    setFocusMin(Math.round(PRESETS[id].focusDurationMs / 60000));
+    setBreakMin(Math.round(PRESETS[id].breakDurationMs / 60000));
   };
 
   const startSession = () => {
-    if (selectedMode.kind === 'custom') {
-      startCustomMinutes(customFocus, customBreak);
-    } else {
-      startPreset(selectedMode.id);
-    }
+    startCustomMinutes(focusMin, breakMin);
     router.push('/session');
   };
 
-  const isCustom = selectedMode.kind === 'custom';
+  const startLabel = activePreset
+    ? `Start ${PRESETS[activePreset].label.toLowerCase()}`
+    : 'Start session';
 
   return (
     <Screen>
       <View style={s.root}>
-        {/* ── Chip row ── */}
-        <View style={s.chipSection}>
+
+        {/* ── Preset chips ── */}
+        <View style={s.section}>
           <Text style={s.eyebrow}>Mode</Text>
           <View style={s.chipRow}>
             {PRESET_ORDER.map((id) => {
-              const sel = selectedMode.kind === 'preset' && selectedMode.id === id;
+              const sel = activePreset === id;
               return (
                 <Pressable
                   key={id}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: sel }}
-                  onPress={() => setSelectedMode({ kind: 'preset', id })}
+                  onPress={() => applyPreset(id)}
                   style={({ pressed }) => [s.chip, sel && s.chipSel, pressed && s.chipPress]}>
                   <Text style={[s.chipTxt, sel && s.chipTxtSel]}>
                     {PRESETS[id].label.replace(' breaks', '')}
@@ -132,57 +135,70 @@ export default function ModesScreen() {
                 </Pressable>
               );
             })}
-            <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{ selected: isCustom }}
-              onPress={() => activateCustom()}
-              style={({ pressed }) => [s.chip, isCustom && s.chipSel, pressed && s.chipPress]}>
-              <Text style={[s.chipTxt, isCustom && s.chipTxtSel]}>Custom</Text>
-            </Pressable>
           </View>
         </View>
 
-        {/* ── Balance bar ── */}
-        <View style={s.barSection}>
-          <Text style={s.eyebrow}>Session balance</Text>
-          <BalanceBar
-            focusMinutes={previewFocus}
-            breakMinutes={previewBreak}
-            onRatioChange={onBarDrag}
+        {/* ── Sliders ── */}
+        <View style={s.section}>
+          <DurationSlider
+            label="Focus"
+            value={focusMin}
+            min={5}
+            max={120}
+            step={5}
+            onChange={setFocusMin}
+          />
+          <DurationSlider
+            label="Break"
+            value={breakMin}
+            min={5}
+            max={60}
+            step={5}
+            onChange={setBreakMin}
           />
         </View>
 
-        {/* ── Controls ── */}
-        <View style={s.controlSection}>
-          <StepperRow
-            label="Round"
-            value={`${roundMinutes}m`}
-            onDec={() => { activateCustom(); setRoundMinutes((v) => Math.max(ROUND_MIN, v - ROUND_STEP)); }}
-            onInc={() => { activateCustom(); setRoundMinutes((v) => Math.min(ROUND_MAX, v + ROUND_STEP)); }}
-            decDisabled={roundMinutes <= ROUND_MIN}
-            incDisabled={roundMinutes >= ROUND_MAX}
-          />
-          <StepperRow
-            label="Rounds"
-            value={`${rotations}×`}
-            onDec={() => { activateCustom(); setRotations((v) => Math.max(ROTATIONS_MIN, v - 1)); }}
-            onInc={() => { activateCustom(); setRotations((v) => Math.min(ROTATIONS_MAX, v + 1)); }}
-            decDisabled={rotations <= ROTATIONS_MIN}
-            incDisabled={rotations >= ROTATIONS_MAX}
-          />
-          {rotations > 1 ? (
-            <Text style={s.totalHint}>
-              {customFocus * rotations}m focus · {customBreak * rotations}m break over {rotations} rounds
-            </Text>
-          ) : null}
+        {/* ── Cycles stepper ── */}
+        <View style={s.section}>
+          <View style={s.cyclesRow}>
+            <Text style={s.cyclesLabel}>Cycles</Text>
+            <View style={s.cyclesControls}>
+              <Pressable
+                onPress={() => setCycles((v) => Math.max(CYCLES_MIN, v - 1))}
+                disabled={cycles <= CYCLES_MIN}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  s.stepBtn,
+                  pressed && s.stepBtnPressed,
+                  cycles <= CYCLES_MIN && s.stepBtnDisabled,
+                ]}>
+                <Text style={s.stepBtnText}>−</Text>
+              </Pressable>
+              <Text style={s.cyclesValue}>{cycles}×</Text>
+              <Pressable
+                onPress={() => setCycles((v) => Math.min(CYCLES_MAX, v + 1))}
+                disabled={cycles >= CYCLES_MAX}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  s.stepBtn,
+                  pressed && s.stepBtnPressed,
+                  cycles >= CYCLES_MAX && s.stepBtnDisabled,
+                ]}>
+                <Text style={s.stepBtnText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Session grid ── */}
+        <View style={s.section}>
+          <Text style={s.eyebrow}>Session</Text>
+          <SessionGrid focusMin={focusMin} breakMin={breakMin} cycles={cycles} />
         </View>
 
         <View style={s.spacer} />
 
-        <PrimaryButton
-          title={isCustom ? 'Start custom session' : `Start ${PRESETS[selectedMode.id].label.toLowerCase()}`}
-          onPress={startSession}
-        />
+        <PrimaryButton title={startLabel} onPress={startSession} />
       </View>
     </Screen>
   );
@@ -194,21 +210,20 @@ const s = StyleSheet.create({
     flex: 1,
     paddingBottom: space.lg,
   },
+  section: {
+    marginTop: space.lg,
+  },
   eyebrow: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.9,
     textTransform: 'uppercase',
     color: colors.textMuted,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   // chips
-  chipSection: {
-    marginTop: space.md,
-  },
   chipRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: space.sm,
   },
   chip: {
@@ -234,33 +249,28 @@ const s = StyleSheet.create({
   chipTxtSel: {
     color: colors.mint,
   },
-  // bar
-  barSection: {
-    marginTop: space.lg,
-  },
-  // controls
-  controlSection: {
-    marginTop: space.lg,
-    paddingTop: space.md,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.07)',
-  },
-  stepperRow: {
+  // cycles stepper
+  cyclesRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 7,
   },
-  stepperLabel: {
+  cyclesLabel: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
-    flex: 1,
   },
-  stepperControls: {
+  cyclesControls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
+  },
+  cyclesValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    minWidth: 36,
+    textAlign: 'center',
   },
   stepBtn: {
     width: 36,
@@ -284,19 +294,49 @@ const s = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 22,
   },
-  stepperValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    minWidth: 48,
-    textAlign: 'center',
+  // session grid
+  gridRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
-  totalHint: {
-    fontSize: 12,
+  tile: {
+    borderRadius: 3,
+  },
+  tileFocus: {
+    backgroundColor: colors.mint,
+    opacity: 0.85,
+  },
+  tileBreak: {
+    backgroundColor: colors.starYellow,
+    opacity: 0.7,
+  },
+  gridLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 14,
+    flexWrap: 'wrap',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+  },
+  legendText: {
+    fontSize: 11,
     color: colors.textMuted,
-    textAlign: 'center',
+    fontWeight: '600',
+  },
+  legendTotal: {
+    fontSize: 11,
+    color: colors.textMuted,
     marginTop: 2,
-    paddingBottom: 4,
+    width: '100%',
   },
   spacer: {
     flex: 1,

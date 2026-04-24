@@ -14,19 +14,23 @@ export type ReconcileResult = {
 export function reconcileSession(nowMs: number, session: PulsarSession): ReconcileResult {
   const applied: string[] = [];
 
-  if (session.state === 'idle' || session.state === 'destabilized' || session.state === 'completed') {
+  if (
+    session.state === 'idle' ||
+    session.state === 'focus_complete' ||
+    session.state === 'destabilized' ||
+    session.state === 'completed'
+  ) {
     return { session, applied };
   }
 
   if (session.state === 'focus_active') {
     const end = focusEndsAt(session);
     if (end != null && nowMs >= end) {
-      applied.push('focus_elapsed_to_break');
+      applied.push('focus_elapsed_to_focus_complete');
       return {
         session: {
           ...session,
-          state: 'break_active',
-          breakStartedAt: end,
+          state: 'focus_complete',
         },
         applied,
       };

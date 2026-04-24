@@ -1,6 +1,7 @@
 export type SessionState =
   | 'idle'
   | 'focus_active'
+  | 'focus_complete'
   | 'break_active'
   | 'destabilized'
   | 'completed';

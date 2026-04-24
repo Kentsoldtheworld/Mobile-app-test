@@ -24,11 +24,15 @@ export function SessionLifecycleRoot({ children }: Props) {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       const prev = appState.current;
       appState.current = next;
+
       if (prev === 'active' && next !== 'active') {
-        useSessionStore.getState().onLeaveActiveDuringFocus();
+        // App went to background — schedule background-only notifications
+        useSessionStore.getState().onAppBackground();
       }
+
       if (prev !== 'active' && next === 'active') {
-        useSessionStore.getState().reconcile();
+        // App returned — check grace period, then reconcile
+        useSessionStore.getState().onReturnFromBackground();
       }
     });
     return () => sub.remove();

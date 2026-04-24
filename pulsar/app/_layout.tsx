@@ -54,7 +54,7 @@ export default function RootLayout() {
             }}>
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="modes" options={{ title: 'Choose a mode' }} />
-            <Stack.Screen name="session" options={{ title: 'Session' }} />
+            <Stack.Screen name="session" options={{ headerShown: false }} />
             <Stack.Screen name="history" options={{ title: 'History' }} />
           </Stack>
         </SessionLifecycleRoot>
