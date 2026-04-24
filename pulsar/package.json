@@ -3,10 +3,10 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo start --ios --localhost",
-    "web": "expo start --web",
+    "start": "npx expo start",
+    "android": "npx expo run:android",
+    "ios": "npx expo start --ios --localhost",
+    "web": "npx expo start --web",
     "test": "jest"
   },
   "dependencies": {
