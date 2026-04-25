@@ -13,6 +13,10 @@ export type PulsarSession = {
   state: SessionState;
   focusDurationMs: number;
   breakDurationMs: number;
+  /** Total number of planned focus+break cycles for this session. */
+  plannedCycles: number;
+  /** Which cycle we are currently on (1-indexed). */
+  currentCycle: number;
   focusStartedAt: number | null;
   breakStartedAt: number | null;
   destabilizedAt: number | null;
@@ -36,6 +40,8 @@ export const IDLE_SESSION: PulsarSession = {
   state: 'idle',
   focusDurationMs: 0,
   breakDurationMs: 0,
+  plannedCycles: 1,
+  currentCycle: 1,
   focusStartedAt: null,
   breakStartedAt: null,
   destabilizedAt: null,

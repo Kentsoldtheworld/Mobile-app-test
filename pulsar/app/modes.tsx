@@ -111,8 +111,8 @@ export default function ModesScreen() {
   };
 
   const startSession = () => {
-    startCustomMinutes(focusMin, breakMin);
-    router.push('/session');
+    startCustomMinutes(focusMin, breakMin, cycles);
+    router.replace('/session');
   };
 
   const totalMin = (focusMin + breakMin) * cycles;
@@ -150,7 +150,7 @@ export default function ModesScreen() {
             label="Focus"
             value={focusMin}
             min={5}
-            max={120}
+            max={60}
             step={5}
             onChange={setFocusMin}
           />

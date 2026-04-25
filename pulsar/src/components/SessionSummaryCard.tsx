@@ -47,13 +47,15 @@ function tileSize(totalBlocks: number, availableWidth: number): number {
 
 type BlockRowProps = {
   achievedFocusBlocks: number;
+  lostBlock: boolean;       // show one red block for destabilized
   missedFocusBlocks: number;
   breakBlocks: number;
+  breakDim: boolean;        // true = break not reached (dim), false = completed (solid)
 };
 
-function BlockRow({ achievedFocusBlocks, missedFocusBlocks, breakBlocks }: BlockRowProps) {
+function BlockRow({ achievedFocusBlocks, lostBlock, missedFocusBlocks, breakBlocks, breakDim }: BlockRowProps) {
   const [width, setWidth] = useState(0);
-  const total = achievedFocusBlocks + missedFocusBlocks + breakBlocks;
+  const total = achievedFocusBlocks + (lostBlock ? 1 : 0) + missedFocusBlocks + breakBlocks;
   const size = width > 0 ? tileSize(total, width) : 0;
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
@@ -61,23 +63,21 @@ function BlockRow({ achievedFocusBlocks, missedFocusBlocks, breakBlocks }: Block
   const tile = (key: string, style: object) => (
     <View
       key={key}
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: 4,
-          marginRight: GAP,
-          marginBottom: GAP,
-        },
-        style,
-      ]}
+      style={[{ width: size, height: size, borderRadius: 4, marginRight: GAP, marginBottom: GAP }, style]}
     />
   );
 
   const tiles: React.ReactElement[] = [];
   for (let i = 0; i < achievedFocusBlocks; i++) tiles.push(tile(`af-${i}`, s.tileFocus));
+  if (lostBlock) tiles.push(tile('lost', s.tileLost));
   for (let i = 0; i < missedFocusBlocks; i++) tiles.push(tile(`mf-${i}`, s.tileMissed));
-  for (let i = 0; i < breakBlocks; i++) tiles.push(tile(`b-${i}`, s.tileBreak));
+  if (breakBlocks > 0) {
+    // small gap between focus and break groups
+    tiles.push(<View key="sep" style={{ width: GAP * 2 }} />);
+    for (let i = 0; i < breakBlocks; i++) {
+      tiles.push(tile(`b-${i}`, breakDim ? s.tileBreakDim : s.tileBreak));
+    }
+  }
 
   return (
     <View style={s.blockRow} onLayout={onLayout}>
@@ -91,18 +91,30 @@ function BlockRow({ achievedFocusBlocks, missedFocusBlocks, breakBlocks }: Block
 export function SessionSummaryCard({ record, compact = false }: Props) {
   const isComplete = record.outcome === 'completed';
 
+  const plannedFocusBlocks = Math.max(1, Math.ceil(record.focusDurationMs / (5 * 60 * 1000)));
+  const plannedBreakBlocks = Math.max(1, Math.ceil(record.breakDurationMs / (5 * 60 * 1000)));
   const plannedFocusMin = Math.round(record.focusDurationMs / 60000);
-  const actualFocusMin = isComplete
-    ? plannedFocusMin
-    : Math.max(0, Math.round((record.endedAt - record.startedAt) / 60000));
 
-  const achievedFocusBlocks = Math.max(1, Math.round(Math.max(1, actualFocusMin) / 5));
+  const actualFocusMs = isComplete
+    ? record.focusDurationMs
+    : Math.max(0, record.endedAt - record.startedAt);
+  const actualFocusMin = Math.round(actualFocusMs / 60000);
+
+  // Blocks completed fully before the session ended
+  const completedFocusBlocks = isComplete
+    ? plannedFocusBlocks
+    : Math.min(plannedFocusBlocks - 1, Math.floor(actualFocusMs / (5 * 60 * 1000)));
+  const achievedFocusBlocks = Math.max(isComplete ? 1 : 0, completedFocusBlocks);
+
+  // The one block they were actively in when the session broke (shown in red)
+  const lostBlock = !isComplete && plannedFocusBlocks > achievedFocusBlocks;
+
   const missedFocusBlocks = isComplete
     ? 0
-    : Math.max(0, Math.round(plannedFocusMin / 5) - achievedFocusBlocks);
-  const breakBlocks = isComplete
-    ? Math.max(1, Math.round(record.breakDurationMs / 60000 / 5))
-    : 0;
+    : Math.max(0, plannedFocusBlocks - achievedFocusBlocks - (lostBlock ? 1 : 0));
+
+  const breakBlocks = plannedBreakBlocks;
+  const breakDim = !isComplete;  // dim if break was never reached
 
   const legendText = isComplete
     ? `Focus ${formatDuration(record.focusDurationMs)} · Break ${formatDuration(record.breakDurationMs)}`
@@ -125,16 +137,26 @@ export function SessionSummaryCard({ record, compact = false }: Props) {
       {/* 5-minute block visualization */}
       <BlockRow
         achievedFocusBlocks={achievedFocusBlocks}
+        lostBlock={lostBlock}
         missedFocusBlocks={missedFocusBlocks}
         breakBlocks={breakBlocks}
+        breakDim={breakDim}
       />
 
       {/* Legend */}
       <View style={s.legendRow}>
-        <View style={s.legendItem}>
-          <View style={[s.legendDot, s.tileFocus]} />
-          <Text style={s.legendText}>Focus</Text>
-        </View>
+        {achievedFocusBlocks > 0 && (
+          <View style={s.legendItem}>
+            <View style={[s.legendDot, s.tileFocus]} />
+            <Text style={s.legendText}>Focus</Text>
+          </View>
+        )}
+        {lostBlock && (
+          <View style={s.legendItem}>
+            <View style={[s.legendDot, s.tileLost]} />
+            <Text style={s.legendText}>Lost</Text>
+          </View>
+        )}
         {missedFocusBlocks > 0 && (
           <View style={s.legendItem}>
             <View style={[s.legendDot, s.tileMissed]} />
@@ -143,7 +165,7 @@ export function SessionSummaryCard({ record, compact = false }: Props) {
         )}
         {breakBlocks > 0 && (
           <View style={s.legendItem}>
-            <View style={[s.legendDot, s.tileBreak]} />
+            <View style={[s.legendDot, breakDim ? s.tileBreakDim : s.tileBreak]} />
             <Text style={s.legendText}>Break</Text>
           </View>
         )}
@@ -169,6 +191,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
     padding: space.lg,
+    alignSelf: 'stretch',
   },
   cardCompact: {
     padding: space.md,
@@ -225,9 +248,17 @@ const s = StyleSheet.create({
     backgroundColor: colors.mint,
     opacity: 0.15,
   },
+  tileLost: {
+    backgroundColor: colors.error,
+    opacity: 0.9,
+  },
   tileBreak: {
     backgroundColor: colors.starYellow,
     opacity: 0.7,
+  },
+  tileBreakDim: {
+    backgroundColor: colors.starYellow,
+    opacity: 0.15,
   },
 
   // legend

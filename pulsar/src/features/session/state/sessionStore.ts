@@ -20,7 +20,7 @@ export type SessionSlice = {
   setHasSeenWelcome: (v: boolean) => void;
   startSessionFromPreset: (presetId: string, focusMinutes: number, breakMinutes: number) => void;
   /** Whole minutes; persisted session uses ms. */
-  startSessionCustomMinutes: (focusMinutes: number, breakMinutes: number) => void;
+  startSessionCustomMinutes: (focusMinutes: number, breakMinutes: number, cycles?: number) => void;
   /** Called when focus timer elapses and user taps "Start break". */
   startBreak: () => void;
   /** Called when user confirms X exit during focus — immediately begins break. */
@@ -83,13 +83,16 @@ export const useSessionStore = create<SessionSlice>()(
         void NotificationService.cancelAllPulsarNotifications();
       },
 
-      startSessionCustomMinutes: (focusMinutes, breakMinutes) => {
+      startSessionCustomMinutes: (focusMinutes, breakMinutes, cycles = 1) => {
         const focusClamped = Math.min(240, Math.max(1, Math.round(focusMinutes)));
         const breakClamped = Math.min(120, Math.max(1, Math.round(breakMinutes)));
+        const cyclesClamped = Math.min(8, Math.max(1, Math.round(cycles)));
         const now = Date.now();
         const session = createFocusSession(now, {
           focusDurationMs: focusClamped * 60 * 1000,
           breakDurationMs: breakClamped * 60 * 1000,
+          plannedCycles: cyclesClamped,
+          currentCycle: 1,
         });
         set({ session, backgroundedAt: null });
         void NotificationService.cancelAllPulsarNotifications();
@@ -203,6 +206,8 @@ export const useSessionStore = create<SessionSlice>()(
         const next = createFocusSession(Date.now(), {
           focusDurationMs: prev.focusDurationMs,
           breakDurationMs: prev.breakDurationMs,
+          plannedCycles: prev.plannedCycles,
+          currentCycle: Math.min(prev.currentCycle + 1, prev.plannedCycles),
           presetId: prev.presetId,
         });
         set({ session: next, backgroundedAt: null });
@@ -215,6 +220,8 @@ export const useSessionStore = create<SessionSlice>()(
         const next = startNextSessionAfterCompleted(Date.now(), prev, {
           focusDurationMs: prev.focusDurationMs,
           breakDurationMs: prev.breakDurationMs,
+          plannedCycles: prev.plannedCycles,
+          currentCycle: Math.min(prev.currentCycle + 1, prev.plannedCycles),
           presetId: prev.presetId,
         });
         if (!next) return;

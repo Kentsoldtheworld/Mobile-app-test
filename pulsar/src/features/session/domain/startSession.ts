@@ -10,7 +10,14 @@ function newId(): string {
 
 export function createFocusSession(
   nowMs: number,
-  params: { focusDurationMs: number; breakDurationMs: number; id?: string; presetId?: string }
+  params: {
+    focusDurationMs: number;
+    breakDurationMs: number;
+    plannedCycles?: number;
+    currentCycle?: number;
+    id?: string;
+    presetId?: string;
+  }
 ): PulsarSession {
   return {
     id: params.id ?? newId(),
@@ -18,6 +25,8 @@ export function createFocusSession(
     state: 'focus_active',
     focusDurationMs: params.focusDurationMs,
     breakDurationMs: params.breakDurationMs,
+    plannedCycles: params.plannedCycles ?? 1,
+    currentCycle: params.currentCycle ?? 1,
     focusStartedAt: nowMs,
     breakStartedAt: null,
     destabilizedAt: null,
@@ -33,7 +42,7 @@ export function createFocusSession(
 export function startNextSessionAfterCompleted(
   nowMs: number,
   completed: PulsarSession,
-  next: { focusDurationMs: number; breakDurationMs: number; presetId?: string }
+  next: { focusDurationMs: number; breakDurationMs: number; plannedCycles?: number; currentCycle?: number; presetId?: string }
 ): PulsarSession | null {
   if (completed.state !== 'completed') return null;
   return createFocusSession(nowMs, next);

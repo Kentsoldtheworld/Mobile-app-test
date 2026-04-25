@@ -8,6 +8,7 @@ export const colors = {
   textSecondary: 'rgba(255,255,255,0.72)',
   textMuted: 'rgba(255,255,255,0.48)',
   outline: 'rgba(66,255,169,0.55)',
+  error: '#E03060',
 } as const;
 
 export const radii = {
