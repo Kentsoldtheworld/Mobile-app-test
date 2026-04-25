@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Coffee, FastForward, House, X } from 'phosphor-react-native';
 
 import { CosmicBackground } from '@/src/components/CosmicBackground';
 import { GhostButton } from '@/src/components/GhostButton';
@@ -12,7 +13,6 @@ import { formatSessionRemaining } from '@/src/features/session/formatRemaining';
 import { useSessionStore } from '@/src/features/session/state/sessionStore';
 import { colors, radii, space } from '@/src/theme/tokens';
 
-const BLUE = '#5F86FF';
 
 // ── Minimal close button ──────────────────────────────────────────────────────
 function CloseButton({ onPress }: { onPress: () => void }) {
@@ -23,7 +23,7 @@ function CloseButton({ onPress }: { onPress: () => void }) {
       accessibilityLabel="Exit focus session"
       accessibilityRole="button"
       style={({ pressed }) => [s.closeBtn, pressed && s.closeBtnPressed]}>
-      <Text style={s.closeBtnText}>✕</Text>
+      <X size={18} weight="bold" color={colors.textSecondary} />
     </Pressable>
   );
 }
@@ -144,16 +144,16 @@ function LiveBlockBar({ session }: { session: PulsarSession }) {
 
     // ── Break blocks for this cycle ──
     if (isPast) {
-      for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, BLUE, 0.85));
+      for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
     } else if (isCurrent && !isFocusActive) {
       const elapsed = session.breakStartedAt ? Math.max(0, now - session.breakStartedAt) : 0;
       const doneCount = Math.min(breakPerCycle - 1, Math.floor(elapsed / BLOCK_MS));
-      for (let i = 0; i < doneCount; i++) tiles.push(block(`b${c}-${i}`, BLUE, 0.85));
-      tiles.push(blockAnim(`b${c}-cur`, BLUE));
-      for (let i = doneCount + 1; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, BLUE, 0.12));
+      for (let i = 0; i < doneCount; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
+      tiles.push(blockAnim(`b${c}-cur`, colors.cosmicLatte));
+      for (let i = doneCount + 1; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.12));
     } else {
       // focus_active current cycle or any future cycle — break not yet reached
-      for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, BLUE, 0.12));
+      for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.12));
     }
 
   }
@@ -272,7 +272,13 @@ export default function SessionScreen() {
               <Text style={s.stateSubtext}>Take a well-earned break.</Text>
             </View>
             <View style={s.bottomCTA}>
-              <PrimaryButton title="Start break" onPress={startBreak} />
+              <PrimaryButton
+                title="Start break"
+                icon={<Coffee size={18} weight="duotone" color={colors.background} />}
+                onPress={startBreak}
+                style={s.breakBtn}
+                pressedStyle={s.breakBtnPressed}
+              />
             </View>
           </View>
         </SafeAreaView>
@@ -290,12 +296,16 @@ export default function SessionScreen() {
               <CloseButton onPress={() => setConfirmBreakExit(true)} />
             </View>
             <View style={s.centerContent}>
-              <Text style={[s.stateHeading, { color: BLUE }]}>on break</Text>
+              <Text style={[s.stateHeading, { color: colors.cosmicLatte }]}>on break</Text>
               {remaining ? <Text style={s.breakTimer}>{remaining}</Text> : null}
               <LiveBlockBar session={session} />
             </View>
             <View style={s.bottomCTA}>
-              <GhostButton title="Skip break" onPress={skipBreak} />
+              <GhostButton
+                title="Skip break"
+                icon={<FastForward size={18} weight="duotone" color={colors.mint} />}
+                onPress={skipBreak}
+              />
             </View>
           </View>
 
@@ -333,6 +343,7 @@ export default function SessionScreen() {
             <View style={s.bottomCTA}>
               <PrimaryButton
                 title="Return home"
+                icon={<House size={18} weight="duotone" color={colors.background} />}
                 onPress={() => {
                   resetSessionToIdle();
                   router.replace('/');
@@ -355,7 +366,7 @@ export default function SessionScreen() {
               <SessionSummaryCard record={lastRecord} />
             ) : (
               <>
-                <Text style={[s.stateHeading, { color: colors.starYellow }]}>session lost</Text>
+                <Text style={[s.stateHeading, { color: colors.cosmicLatte }]}>session lost</Text>
                 <Text style={s.stateSubtext}>You stepped away during focus.</Text>
               </>
             )}
@@ -363,6 +374,7 @@ export default function SessionScreen() {
           <View style={s.bottomCTA}>
             <PrimaryButton
               title="Return home"
+              icon={<House size={18} weight="duotone" color={colors.background} />}
               onPress={() => {
                 resetSessionToIdle();
                 router.replace('/');
@@ -408,11 +420,6 @@ const s = StyleSheet.create({
   },
   closeBtnPressed: {
     backgroundColor: 'rgba(255,255,255,0.20)',
-  },
-  closeBtnText: {
-    color: colors.textSecondary,
-    fontSize: 16,
-    fontWeight: '600',
   },
 
   // Center content
@@ -470,6 +477,12 @@ const s = StyleSheet.create({
   // CTA area
   bottomCTA: {
     paddingBottom: space.xl,
+  },
+  breakBtn: {
+    backgroundColor: colors.cosmicLatte,
+  },
+  breakBtnPressed: {
+    backgroundColor: colors.cosmicLattePressed,
   },
 
   // Exit overlay

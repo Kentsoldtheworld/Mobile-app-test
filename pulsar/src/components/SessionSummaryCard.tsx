@@ -227,7 +227,7 @@ const s = StyleSheet.create({
     color: colors.mint,
   },
   badgeTextLost: {
-    color: colors.starYellow,
+    color: colors.cosmicLatte,
   },
   timestamp: {
     fontSize: 12,
@@ -253,11 +253,11 @@ const s = StyleSheet.create({
     opacity: 0.9,
   },
   tileBreak: {
-    backgroundColor: colors.starYellow,
+    backgroundColor: colors.cosmicLatte,
     opacity: 0.7,
   },
   tileBreakDim: {
-    backgroundColor: colors.starYellow,
+    backgroundColor: colors.cosmicLatte,
     opacity: 0.15,
   },
 

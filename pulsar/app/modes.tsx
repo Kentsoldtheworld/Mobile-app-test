@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { Minus, Plus } from 'phosphor-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -178,7 +179,7 @@ export default function ModesScreen() {
                   pressed && s.stepBtnPressed,
                   cycles <= CYCLES_MIN && s.stepBtnDisabled,
                 ]}>
-                <Text style={s.stepBtnText}>−</Text>
+                <Minus size={16} weight="bold" color={colors.textPrimary} />
               </Pressable>
               <Text style={s.cyclesValue}>{cycles}×</Text>
               <Pressable
@@ -190,7 +191,7 @@ export default function ModesScreen() {
                   pressed && s.stepBtnPressed,
                   cycles >= CYCLES_MAX && s.stepBtnDisabled,
                 ]}>
-                <Text style={s.stepBtnText}>+</Text>
+                <Plus size={16} weight="bold" color={colors.textPrimary} />
               </Pressable>
             </View>
           </View>
@@ -294,12 +295,6 @@ const s = StyleSheet.create({
   stepBtnDisabled: {
     opacity: 0.3,
   },
-  stepBtnText: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
   // session grid
   gridRow: {
     flexDirection: 'row',
@@ -313,7 +308,7 @@ const s = StyleSheet.create({
     opacity: 0.85,
   },
   tileBreak: {
-    backgroundColor: colors.starYellow,
+    backgroundColor: colors.cosmicLatte,
     opacity: 0.7,
   },
   gridLegend: {
