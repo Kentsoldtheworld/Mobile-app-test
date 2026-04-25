@@ -1,92 +1,82 @@
 import { useRouter } from 'expo-router';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
-import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { GhostButton } from '@/src/components/GhostButton';
 import { Screen } from '@/src/components/Screen';
-import { useSessionStore } from '@/src/features/session/state/sessionStore';
+import { SessionSummaryCard } from '@/src/components/SessionSummaryCard';
 import type { SessionHistoryRecord } from '@/src/features/session/domain/types';
+import { useSessionStore } from '@/src/features/session/state/sessionStore';
 import { colors, space } from '@/src/theme/tokens';
 
 export default function HistoryScreen() {
   const router = useRouter();
   const history = useSessionStore((s) => s.history);
+  const reversed = [...history].reverse();
 
   return (
     <Screen>
-      <View style={styles.flex}>
-        <Text style={styles.subtitle}>Local-only session outcomes (newest last in this MVP list).</Text>
-        <FlatList
-          style={styles.flex}
-          data={[...history].reverse()}
-          keyExtractor={(item) => item.id + item.endedAt}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Text style={styles.empty}>No sessions yet. Complete or destabilize a run to see it here.</Text>
-          }
-          renderItem={({ item }) => <HistoryRow item={item} />}
-        />
-        <PrimaryButton title="Choose mode" onPress={() => router.push('/modes')} style={styles.footer} />
-      </View>
+      <FlatList
+        data={reversed}
+        keyExtractor={(item) => item.id + item.endedAt}
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <Text style={styles.heading}>Session history</Text>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTitle}>No sessions yet</Text>
+            <Text style={styles.emptyBody}>Complete or lose a session and it'll show up here.</Text>
+            <GhostButton title="Choose a mode" onPress={() => router.push('/modes')} style={styles.emptyBtn} />
+          </View>
+        }
+        renderItem={({ item }: { item: SessionHistoryRecord }) => (
+          <View style={styles.cardWrap}>
+            <SessionSummaryCard record={item} compact />
+          </View>
+        )}
+        ListFooterComponent={history.length > 0 ? (
+          <GhostButton
+            title="Choose a mode"
+            onPress={() => router.push('/modes')}
+            style={styles.footer}
+          />
+        ) : null}
+      />
     </Screen>
   );
 }
 
-function HistoryRow({ item }: { item: SessionHistoryRecord }) {
-  const when = new Date(item.endedAt).toLocaleString();
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowTitle}>{item.outcome === 'completed' ? 'Completed' : 'Destabilized'}</Text>
-      <Text style={styles.rowMeta}>
-        {when} · focus {Math.round(item.focusDurationMs / 60000)}m · breaks {Math.round(item.breakDurationMs / 60000)}m ·
-        interruptions {item.interruptionCount}
-      </Text>
-      {item.presetId ? <Text style={styles.rowPreset}>Preset: {item.presetId}</Text> : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.textSecondary,
-    marginBottom: space.md,
-  },
   list: {
     paddingBottom: space.xl,
-    gap: space.md,
   },
-  empty: {
-    fontSize: 15,
-    color: colors.textMuted,
-    marginTop: space.lg,
+  heading: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: space.lg,
   },
-  row: {
-    padding: space.md,
-    borderRadius: 12,
-    backgroundColor: colors.backgroundElevated,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+  cardWrap: {
+    marginBottom: space.md,
   },
-  rowTitle: {
-    fontSize: 16,
+  emptyWrap: {
+    marginTop: space.xl,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
     fontWeight: '700',
-    color: colors.starYellow,
-  },
-  rowMeta: {
-    marginTop: space.xs,
-    fontSize: 13,
     color: colors.textSecondary,
-    lineHeight: 18,
   },
-  rowPreset: {
+  emptyBody: {
     marginTop: space.xs,
-    fontSize: 12,
-    color: colors.mint,
-    fontWeight: '600',
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyBtn: {
+    marginTop: space.xl,
   },
   footer: {
     marginTop: space.md,

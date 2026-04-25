@@ -31,6 +31,8 @@ export type SessionSlice = {
   /** Called when the app returns to foreground. Resumes or destabilizes based on elapsed time. */
   onReturnFromBackground: () => void;
   resetSessionToIdle: () => void;
+  /** Skips the current break and immediately starts the next focus round. */
+  skipBreak: () => void;
   /** Starts a new focus round using the same durations as the completed session. */
   startNextRound: () => void;
 };
@@ -163,6 +165,7 @@ export const useSessionStore = create<SessionSlice>()(
           set({ backgroundedAt: null });
 
           if (elapsed >= GRACE_PERIOD_MS) {
+            // Grace expired — break the session
             const now = Date.now();
             set((state) => {
               const res = destabilizeOnFocusExit(now, state.session);
@@ -174,14 +177,35 @@ export const useSessionStore = create<SessionSlice>()(
             cancelStaleNotifications(get().session);
             return;
           }
+
+          // Within grace — pause compensation: push focusStartedAt forward by
+          // the time spent away so the countdown resumes exactly where it left off
+          set((state) => {
+            const s = state.session;
+            if (s.state !== 'focus_active' || s.focusStartedAt == null) return state;
+            return { session: { ...s, focusStartedAt: s.focusStartedAt + elapsed } };
+          });
+        } else {
+          set({ backgroundedAt: null });
         }
 
-        set({ backgroundedAt: null });
         get().reconcile();
       },
 
       resetSessionToIdle: () => {
         set({ session: IDLE_SESSION, backgroundedAt: null });
+        void NotificationService.cancelAllPulsarNotifications();
+      },
+
+      skipBreak: () => {
+        const prev = get().session;
+        if (prev.state !== 'break_active') return;
+        const next = createFocusSession(Date.now(), {
+          focusDurationMs: prev.focusDurationMs,
+          breakDurationMs: prev.breakDurationMs,
+          presetId: prev.presetId,
+        });
+        set({ session: next, backgroundedAt: null });
         void NotificationService.cancelAllPulsarNotifications();
       },
 

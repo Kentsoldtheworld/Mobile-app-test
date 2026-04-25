@@ -17,6 +17,13 @@ const BLOCK_MIN = 8;  // px — square size at small counts
 const BLOCK_MAX = 13; // px — square size at small counts
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+function formatTotalTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m}m`;
+}
+
 function matchPreset(focus: number, brk: number): PresetId | null {
   for (const id of PRESET_ORDER) {
     const p = PRESETS[id];
@@ -108,9 +115,8 @@ export default function ModesScreen() {
     router.push('/session');
   };
 
-  const startLabel = activePreset
-    ? `Start ${PRESETS[activePreset].label.toLowerCase()}`
-    : 'Start session';
+  const totalMin = (focusMin + breakMin) * cycles;
+  const startLabel = `Start ${formatTotalTime(totalMin)} session`;
 
   return (
     <Screen>

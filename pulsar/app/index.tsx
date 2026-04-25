@@ -1,73 +1,80 @@
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { GhostButton } from '@/src/components/GhostButton';
-import { MascotPeek } from '@/src/components/MascotPeek';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { Screen } from '@/src/components/Screen';
 import { useSessionStore } from '@/src/features/session/state/sessionStore';
 import { colors, space } from '@/src/theme/tokens';
 
-export default function WelcomeScreen() {
+export default function HomeScreen() {
   const router = useRouter();
-  const hasSeenWelcome = useSessionStore((s) => s.hasSeenWelcome);
+  const session = useSessionStore((s) => s.session);
 
-  useEffect(() => {
-    if (hasSeenWelcome) {
-      router.replace('/modes');
-    }
-  }, [hasSeenWelcome, router]);
-
-  const setHasSeenWelcome = useSessionStore((s) => s.setHasSeenWelcome);
+  const hasActiveSession =
+    session.state === 'focus_active' ||
+    session.state === 'focus_complete' ||
+    session.state === 'break_active';
 
   return (
     <Screen>
-      <MascotPeek />
-      <View style={styles.body}>
-        <Text style={styles.title}>Welcome to Pulsar</Text>
-        <Text style={styles.bodyText}>
-          Stay in the app during focus. Break is your release. Come back on purpose after each break.
-        </Text>
-        <PrimaryButton
-          title="Get started"
-          onPress={() => {
-            setHasSeenWelcome(true);
-            router.push('/modes');
-          }}
-          style={styles.cta}
-        />
-        <GhostButton
-          title="Session history"
-          onPress={() => router.push('/history')}
-          style={styles.secondary}
-        />
+      <View style={s.root}>
+        {/* Wordmark / title */}
+        <View style={s.top}>
+          <Text style={s.wordmark}>pulsar</Text>
+          <Text style={s.tagline}>stay in focus. take your breaks.</Text>
+        </View>
+
+        {/* CTAs */}
+        <View style={s.actions}>
+          {hasActiveSession ? (
+            <PrimaryButton
+              title="Resume session"
+              onPress={() => router.push('/session')}
+            />
+          ) : (
+            <PrimaryButton
+              title="Start a session"
+              onPress={() => router.push('/modes')}
+            />
+          )}
+          <GhostButton
+            title="Session history"
+            onPress={() => router.push('/history')}
+            style={s.secondary}
+          />
+        </View>
       </View>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  body: {
+const s = StyleSheet.create({
+  root: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingBottom: space.xl,
+  },
+  top: {
     flex: 1,
     justifyContent: 'center',
-    gap: space.md,
   },
-  title: {
-    fontSize: 28,
+  wordmark: {
+    fontSize: 52,
     fontWeight: '800',
-    color: colors.starYellow,
-    letterSpacing: 0.2,
+    color: colors.mint,
+    letterSpacing: -1,
   },
-  bodyText: {
+  tagline: {
+    marginTop: space.sm,
     fontSize: 16,
-    lineHeight: 24,
     color: colors.textSecondary,
+    lineHeight: 24,
   },
-  cta: {
-    marginTop: space.md,
+  actions: {
+    gap: space.sm,
   },
   secondary: {
-    marginTop: space.sm,
+    marginTop: 0,
   },
 });

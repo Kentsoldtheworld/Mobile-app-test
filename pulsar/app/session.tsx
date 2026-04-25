@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CosmicBackground } from '@/src/components/CosmicBackground';
 import { GhostButton } from '@/src/components/GhostButton';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { SessionSummaryCard } from '@/src/components/SessionSummaryCard';
 import { playAlarm } from '@/src/features/session/audio/alarmPlayer';
 import { formatSessionRemaining } from '@/src/features/session/formatRemaining';
 import { useSessionStore } from '@/src/features/session/state/sessionStore';
@@ -27,7 +28,7 @@ function CloseButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-// ── "Are you sure?" overlay ───────────────────────────────────────────────────
+// ── "End session?" overlay ────────────────────────────────────────────────────
 function ExitOverlay({ onNevermind, onConfirm }: { onNevermind: () => void; onConfirm: () => void }) {
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -38,10 +39,10 @@ function ExitOverlay({ onNevermind, onConfirm }: { onNevermind: () => void; onCo
   return (
     <Animated.View style={[s.overlayBackdrop, { opacity }]}>
       <View style={s.overlayCard}>
-        <Text style={s.overlayHeading}>are you sure you want to exit?</Text>
-        <Text style={s.overlayBody}>your focus timer will skip to break if you leave.</Text>
-        <PrimaryButton title="yeah, I'm sure" onPress={onConfirm} style={s.overlayCTA} />
-        <GhostButton title="nevermind" onPress={onNevermind} style={s.overlayGhost} />
+        <Text style={s.overlayHeading}>end your session?</Text>
+        <Text style={s.overlayBody}>your progress will be lost.</Text>
+        <PrimaryButton title="end session" onPress={onConfirm} style={s.overlayCTA} />
+        <GhostButton title="nevermind, keep going" onPress={onNevermind} style={s.overlayGhost} />
       </View>
     </Animated.View>
   );
@@ -51,11 +52,14 @@ function ExitOverlay({ onNevermind, onConfirm }: { onNevermind: () => void; onCo
 export default function SessionScreen() {
   const router = useRouter();
   const session = useSessionStore((s) => s.session);
+  const history = useSessionStore((s) => s.history);
   const reconcile = useSessionStore((s) => s.reconcile);
   const startBreak = useSessionStore((s) => s.startBreak);
-  const skipToBreak = useSessionStore((s) => s.skipToBreak);
+  const skipBreak = useSessionStore((s) => s.skipBreak);
   const startNextRound = useSessionStore((s) => s.startNextRound);
   const resetSessionToIdle = useSessionStore((s) => s.resetSessionToIdle);
+
+  const lastRecord = history.length > 0 ? history[history.length - 1] : null;
 
   const [confirmExit, setConfirmExit] = useState(false);
   const [tick, setTick] = useState(0);
@@ -120,7 +124,8 @@ export default function SessionScreen() {
               onNevermind={() => setConfirmExit(false)}
               onConfirm={() => {
                 setConfirmExit(false);
-                skipToBreak();
+                resetSessionToIdle();
+                router.replace('/modes');
               }}
             />
           ) : null}
@@ -161,10 +166,7 @@ export default function SessionScreen() {
             <View style={s.bottomCTA}>
               <GhostButton
                 title="Skip break"
-                onPress={() => {
-                  resetSessionToIdle();
-                  router.replace('/modes');
-                }}
+                onPress={skipBreak}
               />
             </View>
           </View>
@@ -180,8 +182,14 @@ export default function SessionScreen() {
         <SafeAreaView style={s.safe}>
           <View style={s.stateRoot}>
             <View style={s.centerContent}>
-              <Text style={s.stateHeading}>break complete</Text>
-              <Text style={s.stateSubtext}>Ready for your next round?</Text>
+              {lastRecord ? (
+                <SessionSummaryCard record={lastRecord} />
+              ) : (
+                <>
+                  <Text style={s.stateHeading}>break complete</Text>
+                  <Text style={s.stateSubtext}>Ready for your next round?</Text>
+                </>
+              )}
             </View>
             <View style={s.bottomCTA}>
               <PrimaryButton title="Start next round" onPress={startNextRound} />
@@ -206,8 +214,14 @@ export default function SessionScreen() {
       <SafeAreaView style={s.safe}>
         <View style={s.stateRoot}>
           <View style={s.centerContent}>
-            <Text style={[s.stateHeading, { color: colors.starYellow }]}>session lost</Text>
-            <Text style={s.stateSubtext}>You stepped away during focus. That's okay — take your time.</Text>
+            {lastRecord ? (
+              <SessionSummaryCard record={lastRecord} />
+            ) : (
+              <>
+                <Text style={[s.stateHeading, { color: colors.starYellow }]}>session lost</Text>
+                <Text style={s.stateSubtext}>You stepped away during focus.</Text>
+              </>
+            )}
           </View>
           <View style={s.bottomCTA}>
             <PrimaryButton
