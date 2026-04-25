@@ -10,7 +10,7 @@ import { Screen } from '@/src/components/Screen';
 import { useSessionStore } from '@/src/features/session/state/sessionStore';
 import { colors, space } from '@/src/theme/tokens';
 
-const EXPRESSIONS: Expression[] = ['default', 'happy', 'bored', 'angry'];
+const EXPRESSIONS: Expression[] = ['default', 'happy', 'bored', 'sad', 'angry'];
 
 export default function HomeScreen() {
   const router = useRouter();
