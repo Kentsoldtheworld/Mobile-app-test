@@ -2,13 +2,13 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Coffee, FastForward, House, X } from 'phosphor-react-native';
+import { Coffee, FastForward, House, Lightning, X } from 'phosphor-react-native';
 
 import { CosmicBackground } from '@/src/components/CosmicBackground';
 import { GhostButton } from '@/src/components/GhostButton';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { SessionSummaryCard } from '@/src/components/SessionSummaryCard';
-import { playAlarm } from '@/src/features/session/audio/alarmPlayer';
+import { playBreakAlarm, playFocusAlarm } from '@/src/features/session/audio/alarmPlayer';
 import { formatSessionRemaining } from '@/src/features/session/formatRemaining';
 import { useSessionStore } from '@/src/features/session/state/sessionStore';
 import { colors, radii, space } from '@/src/theme/tokens';
@@ -70,15 +70,35 @@ function BreakExitOverlay({ onStay, onEnd }: { onStay: () => void; onEnd: () => 
   );
 }
 
+// ── "Skip break?" overlay ─────────────────────────────────────────────────────
+function SkipBreakOverlay({ onKeepResting, onSkip }: { onKeepResting: () => void; onSkip: () => void }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+  }, [opacity]);
+
+  return (
+    <Animated.View style={[s.overlayBackdrop, { opacity }]}>
+      <View style={s.overlayCard}>
+        <Text style={s.overlayHeading}>skip your break?</Text>
+        <Text style={s.overlayBody}>
+          {"Breaks exist for a reason — your brain needs time to consolidate what you just did.\n\nSkipping now means starting the next focus already depleted. You'll likely get less out of it.\n\nIf you're truly ready, we won't stop you."}
+        </Text>
+        <PrimaryButton title="skip the break" onPress={onSkip} style={s.overlayCTA} />
+        <GhostButton title="keep resting" onPress={onKeepResting} style={s.overlayGhost} />
+      </View>
+    </Animated.View>
+  );
+}
+
 // ── Live full-session block bar ───────────────────────────────────────────────
-// Renders every planned cycle (focus + break) so the user always sees the
-// complete session layout. Past cycles are fully lit; the current block pulses;
-// future blocks are dim.
+// Pattern: F (B F) × (plannedCycles - 1)  — sessions always end on a focus.
+// e.g. 3 cycles → F B F B F  (3 focus, 2 breaks)
 import type { PulsarSession } from '@/src/features/session/domain/types';
 
 const BLOCK_MS = 5 * 60 * 1000;
 const BLOCK_GAP = 3;
-const CYCLE_SEP = 0; // no gap between cycles — color contrast is enough
 
 function LiveBlockBar({ session }: { session: PulsarSession }) {
   const [barWidth, setBarWidth] = useState(0);
@@ -99,16 +119,18 @@ function LiveBlockBar({ session }: { session: PulsarSession }) {
   const focusPerCycle = Math.max(1, Math.ceil(session.focusDurationMs / BLOCK_MS));
   const breakPerCycle = Math.max(1, Math.ceil(session.breakDurationMs / BLOCK_MS));
   const plannedCycles = session.plannedCycles ?? 1;
-  const currentCycle = session.currentCycle ?? 1; // 1-indexed
-  const isFocusActive = session.state === 'focus_active';
+  const currentCycle = session.currentCycle ?? 1;
 
-  // Tile sizing: fit one row per cycle if few cycles, else wrap
-  const blocksPerCycle = focusPerCycle + breakPerCycle;
-  const totalBlocks = blocksPerCycle * plannedCycles;
-  const perRow = Math.min(totalBlocks, 12);
+  // N focus periods + (N-1) break periods
+  const totalBlocks = plannedCycles * focusPerCycle + Math.max(0, plannedCycles - 1) * breakPerCycle;
+
+  // Size tiles to comfortably fit 12 per row — centering handles the rest.
+  // We never size tiles to fill the full bar width so justifyContent:'center'
+  // has room to visually center both full rows and the final partial row.
+  const TILES_PER_ROW = 12;
   const tileSize =
     barWidth > 0
-      ? Math.min(36, Math.max(8, Math.floor((barWidth - BLOCK_GAP * (perRow - 1)) / perRow)))
+      ? Math.min(28, Math.max(8, Math.floor((barWidth - BLOCK_GAP * (TILES_PER_ROW - 1)) / TILES_PER_ROW)))
       : 0;
 
   const block = (key: string, color: string, opacity: number) => (
@@ -120,42 +142,41 @@ function LiveBlockBar({ session }: { session: PulsarSession }) {
 
   const now = Date.now();
   const tiles: React.ReactElement[] = [];
+  const isBreakPhase = session.state === 'break_active' || session.state === 'break_complete';
 
   for (let c = 1; c <= plannedCycles; c++) {
     const isPast = c < currentCycle;
     const isCurrent = c === currentCycle;
 
-    // ── Focus blocks for this cycle ──
-    if (isPast) {
+    // ── Focus blocks ──
+    if (isPast || (isCurrent && isBreakPhase)) {
       for (let i = 0; i < focusPerCycle; i++) tiles.push(block(`f${c}-${i}`, colors.mint, 0.85));
-    } else if (isCurrent && isFocusActive) {
+    } else if (isCurrent && session.state === 'focus_active') {
       const elapsed = session.focusStartedAt ? Math.max(0, now - session.focusStartedAt) : 0;
       const doneCount = Math.min(focusPerCycle - 1, Math.floor(elapsed / BLOCK_MS));
       for (let i = 0; i < doneCount; i++) tiles.push(block(`f${c}-${i}`, colors.mint, 0.85));
       tiles.push(blockAnim(`f${c}-cur`, colors.mint));
       for (let i = doneCount + 1; i < focusPerCycle; i++) tiles.push(block(`f${c}-${i}`, colors.mint, 0.12));
-    } else if (isCurrent && !isFocusActive) {
-      // break_active — focus done for this cycle
-      for (let i = 0; i < focusPerCycle; i++) tiles.push(block(`f${c}-${i}`, colors.mint, 0.85));
     } else {
-      // future cycle
       for (let i = 0; i < focusPerCycle; i++) tiles.push(block(`f${c}-${i}`, colors.mint, 0.12));
     }
 
-    // ── Break blocks for this cycle ──
-    if (isPast) {
-      for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
-    } else if (isCurrent && !isFocusActive) {
-      const elapsed = session.breakStartedAt ? Math.max(0, now - session.breakStartedAt) : 0;
-      const doneCount = Math.min(breakPerCycle - 1, Math.floor(elapsed / BLOCK_MS));
-      for (let i = 0; i < doneCount; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
-      tiles.push(blockAnim(`b${c}-cur`, colors.cosmicLatte));
-      for (let i = doneCount + 1; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.12));
-    } else {
-      // focus_active current cycle or any future cycle — break not yet reached
-      for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.12));
+    // ── Break blocks — only between focus periods (not after the last one) ──
+    if (c < plannedCycles) {
+      if (isPast) {
+        for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
+      } else if (isCurrent && session.state === 'break_active') {
+        const elapsed = session.breakStartedAt ? Math.max(0, now - session.breakStartedAt) : 0;
+        const doneCount = Math.min(breakPerCycle - 1, Math.floor(elapsed / BLOCK_MS));
+        for (let i = 0; i < doneCount; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
+        tiles.push(blockAnim(`b${c}-cur`, colors.cosmicLatte));
+        for (let i = doneCount + 1; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.12));
+      } else if (isCurrent && session.state === 'break_complete') {
+        for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.85));
+      } else {
+        for (let i = 0; i < breakPerCycle; i++) tiles.push(block(`b${c}-${i}`, colors.cosmicLatte, 0.12));
+      }
     }
-
   }
 
   return (
@@ -169,7 +190,10 @@ const lb = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',  // centers every row, especially the last partial one
+    alignContent: 'center',    // centers the row group vertically when wrapped
     marginTop: space.xl,
+    width: '100%',
   },
 });
 
@@ -181,6 +205,7 @@ export default function SessionScreen() {
   const reconcile = useSessionStore((s) => s.reconcile);
   const startBreak = useSessionStore((s) => s.startBreak);
   const skipBreak = useSessionStore((s) => s.skipBreak);
+  const startNextFocus = useSessionStore((s) => s.startNextFocus);
   const startNextRound = useSessionStore((s) => s.startNextRound);
   const resetSessionToIdle = useSessionStore((s) => s.resetSessionToIdle);
 
@@ -188,6 +213,7 @@ export default function SessionScreen() {
 
   const [confirmExit, setConfirmExit] = useState(false);
   const [confirmBreakExit, setConfirmBreakExit] = useState(false);
+  const [confirmSkipBreak, setConfirmSkipBreak] = useState(false);
   const [tick, setTick] = useState(0);
   const prevStateRef = useRef(session.state);
 
@@ -211,9 +237,11 @@ export default function SessionScreen() {
     prevStateRef.current = session.state;
     if (
       (prev === 'focus_active' && session.state === 'focus_complete') ||
-      (prev === 'break_active' && session.state === 'completed')
+      (prev === 'focus_active' && session.state === 'completed')
     ) {
-      void playAlarm();
+      void playFocusAlarm();
+    } else if (prev === 'break_active' && session.state === 'break_complete') {
+      void playBreakAlarm();
     }
   }, [session.state]);
 
@@ -239,7 +267,7 @@ export default function SessionScreen() {
 
             {/* Centered label + countdown + live blocks */}
             <View style={s.centerContent}>
-              <Text style={s.focusLabel}>in focus...</Text>
+              <Text style={s.focusLabel}>focussing</Text>
               {remaining ? <Text style={s.focusTimer}>{remaining}</Text> : null}
               <LiveBlockBar session={session} />
             </View>
@@ -304,7 +332,7 @@ export default function SessionScreen() {
               <GhostButton
                 title="Skip break"
                 icon={<FastForward size={18} weight="duotone" color={colors.mint} />}
-                onPress={skipBreak}
+                onPress={() => setConfirmSkipBreak(true)}
               />
             </View>
           </View>
@@ -319,6 +347,42 @@ export default function SessionScreen() {
               }}
             />
           ) : null}
+
+          {confirmSkipBreak ? (
+            <SkipBreakOverlay
+              onKeepResting={() => setConfirmSkipBreak(false)}
+              onSkip={() => {
+                setConfirmSkipBreak(false);
+                skipBreak();
+              }}
+            />
+          ) : null}
+        </SafeAreaView>
+      </CosmicBackground>
+    );
+  }
+
+  // ── break_complete ───────────────────────────────────────────────────────
+  if (session.state === 'break_complete') {
+    return (
+      <CosmicBackground>
+        <SafeAreaView style={s.safe}>
+          <View style={s.stateRoot}>
+            <View style={s.centerContent}>
+              <Text style={[s.stateHeading, { color: colors.cosmicLatte }]}>break complete</Text>
+              <Text style={s.stateSubtext}>
+                {`Focus period ${session.currentCycle + 1} of ${session.plannedCycles} — ready when you are.`}
+              </Text>
+              <LiveBlockBar session={session} />
+            </View>
+            <View style={s.bottomCTA}>
+              <PrimaryButton
+                title="Start next focus"
+                icon={<Lightning size={18} weight="duotone" color={colors.background} />}
+                onPress={startNextFocus}
+              />
+            </View>
+          </View>
         </SafeAreaView>
       </CosmicBackground>
     );

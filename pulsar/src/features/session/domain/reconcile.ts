@@ -17,6 +17,7 @@ export function reconcileSession(nowMs: number, session: PulsarSession): Reconci
   if (
     session.state === 'idle' ||
     session.state === 'focus_complete' ||
+    session.state === 'break_complete' ||
     session.state === 'destabilized' ||
     session.state === 'completed'
   ) {
@@ -26,12 +27,17 @@ export function reconcileSession(nowMs: number, session: PulsarSession): Reconci
   if (session.state === 'focus_active') {
     const end = focusEndsAt(session);
     if (end != null && nowMs >= end) {
+      // Sessions always end on the last focus timer — never on a break.
+      if (session.currentCycle >= session.plannedCycles) {
+        applied.push('focus_elapsed_to_completed');
+        return {
+          session: { ...session, state: 'completed', completedAt: end },
+          applied,
+        };
+      }
       applied.push('focus_elapsed_to_focus_complete');
       return {
-        session: {
-          ...session,
-          state: 'focus_complete',
-        },
+        session: { ...session, state: 'focus_complete' },
         applied,
       };
     }
@@ -41,13 +47,10 @@ export function reconcileSession(nowMs: number, session: PulsarSession): Reconci
   if (session.state === 'break_active') {
     const end = breakEndsAt(session);
     if (end != null && nowMs >= end) {
-      applied.push('break_elapsed_to_completed');
+      // Break done — prompt user to start the next focus period.
+      applied.push('break_elapsed_to_break_complete');
       return {
-        session: {
-          ...session,
-          state: 'completed',
-          completedAt: end,
-        },
+        session: { ...session, state: 'break_complete' },
         applied,
       };
     }

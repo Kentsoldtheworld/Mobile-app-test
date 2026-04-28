@@ -154,12 +154,16 @@ function groupByPeriod(records: SessionHistoryRecord[], mode: ViewMode): PeriodG
     const g = map.get(key)!;
     g.records.push(r);
 
-    const plannedFocus = Math.max(1, Math.ceil(r.focusDurationMs / BLOCK_MS));
-    const plannedBreak = Math.max(1, Math.ceil(r.breakDurationMs / BLOCK_MS));
+    const cycles = r.plannedCycles ?? 1;
+    const focusBlocksPerCycle = Math.max(1, Math.ceil(r.focusDurationMs / BLOCK_MS));
+    const breakBlocksPerCycle = Math.max(1, Math.ceil(r.breakDurationMs / BLOCK_MS));
+    // Sessions end on focus: N focus periods, (N-1) break periods
+    const plannedFocus = focusBlocksPerCycle * cycles;
+    const plannedBreak = breakBlocksPerCycle * Math.max(0, cycles - 1);
 
     if (r.outcome === 'completed') {
       g.completed += 1;
-      g.totalFocusMs += r.focusDurationMs;
+      g.totalFocusMs += r.focusDurationMs * cycles;
       g.focusBlocks += plannedFocus;
       g.breakBlocks += plannedBreak;
     } else {

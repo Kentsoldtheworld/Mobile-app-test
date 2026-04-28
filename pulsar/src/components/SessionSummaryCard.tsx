@@ -91,9 +91,13 @@ function BlockRow({ achievedFocusBlocks, lostBlock, missedFocusBlocks, breakBloc
 export function SessionSummaryCard({ record, compact = false }: Props) {
   const isComplete = record.outcome === 'completed';
 
-  const plannedFocusBlocks = Math.max(1, Math.ceil(record.focusDurationMs / (5 * 60 * 1000)));
-  const plannedBreakBlocks = Math.max(1, Math.ceil(record.breakDurationMs / (5 * 60 * 1000)));
-  const plannedFocusMin = Math.round(record.focusDurationMs / 60000);
+  const cycles = record.plannedCycles ?? 1;
+  const focusBlocksPerCycle = Math.max(1, Math.ceil(record.focusDurationMs / (5 * 60 * 1000)));
+  const breakBlocksPerCycle = Math.max(1, Math.ceil(record.breakDurationMs / (5 * 60 * 1000)));
+  // Sessions end on focus: N focus periods, (N-1) break periods
+  const plannedFocusBlocks = focusBlocksPerCycle * cycles;
+  const plannedBreakBlocks = breakBlocksPerCycle * Math.max(0, cycles - 1);
+  const plannedFocusMin = Math.round((record.focusDurationMs * cycles) / 60000);
 
   const actualFocusMs = isComplete
     ? record.focusDurationMs
@@ -114,7 +118,7 @@ export function SessionSummaryCard({ record, compact = false }: Props) {
     : Math.max(0, plannedFocusBlocks - achievedFocusBlocks - (lostBlock ? 1 : 0));
 
   const breakBlocks = plannedBreakBlocks;
-  const breakDim = !isComplete;  // dim if break was never reached
+  const breakDim = !isComplete; // dim if break was never reached
 
   const legendText = isComplete
     ? `Focus ${formatDuration(record.focusDurationMs)} · Break ${formatDuration(record.breakDurationMs)}`

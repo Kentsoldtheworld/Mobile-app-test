@@ -16,6 +16,7 @@ export function buildHistoryRecord(
     presetId: session.presetId,
     focusDurationMs: session.focusDurationMs,
     breakDurationMs: session.breakDurationMs,
+    plannedCycles: session.plannedCycles,
     interruptionCount: session.interruptions.length,
     outcome,
   };

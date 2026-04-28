@@ -40,8 +40,8 @@ function matchPreset(focus: number, brk: number): PresetId | null {
 function SessionGrid({ focusMin, breakMin, cycles }: { focusMin: number; breakMin: number; cycles: number }) {
   const focusBlocks = Math.max(1, Math.round(focusMin / 5));
   const breakBlocks = Math.max(1, Math.round(breakMin / 5));
-  const perCycle = focusBlocks + breakBlocks;
-  const total = perCycle * cycles;
+  // Pattern: F (B F) × (cycles - 1)  — always ends on a focus period
+  const total = cycles * focusBlocks + Math.max(0, cycles - 1) * breakBlocks;
 
   // Scale tile size down when there are lots of blocks
   const tileSize = total > 36 ? BLOCK_MIN : BLOCK_MAX;
@@ -51,7 +51,10 @@ function SessionGrid({ focusMin, breakMin, cycles }: { focusMin: number; breakMi
     const arr: { isFocus: boolean }[] = [];
     for (let c = 0; c < cycles; c++) {
       for (let f = 0; f < focusBlocks; f++) arr.push({ isFocus: true });
-      for (let b = 0; b < breakBlocks; b++) arr.push({ isFocus: false });
+      // Only add a break after each focus EXCEPT the last one
+      if (c < cycles - 1) {
+        for (let b = 0; b < breakBlocks; b++) arr.push({ isFocus: false });
+      }
     }
     return arr;
   }, [focusBlocks, breakBlocks, cycles]);

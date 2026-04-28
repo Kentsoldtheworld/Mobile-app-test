@@ -31,9 +31,11 @@ export type SessionSlice = {
   /** Called when the app returns to foreground. Resumes or destabilizes based on elapsed time. */
   onReturnFromBackground: () => void;
   resetSessionToIdle: () => void;
-  /** Skips the current break and immediately starts the next focus round. */
+  /** Skips an in-progress break and immediately starts the next focus round. */
   skipBreak: () => void;
-  /** Starts a new focus round using the same durations as the completed session. */
+  /** Called when a break timer completes and the user taps "Start next focus". */
+  startNextFocus: () => void;
+  /** Starts a brand-new session with the same settings after the whole session completes. */
   startNextRound: () => void;
 };
 
@@ -51,6 +53,7 @@ function cancelStaleNotifications(session: PulsarSession) {
     } else if (
       session.state === 'idle' ||
       session.state === 'focus_complete' ||
+      session.state === 'break_complete' ||
       session.state === 'completed' ||
       session.state === 'destabilized'
     ) {
@@ -127,7 +130,7 @@ export const useSessionStore = create<SessionSlice>()(
           const { session: next, applied } = reconcileSession(now, state.session);
           if (applied.length === 0) return state;
           let history = state.history;
-          if (applied.includes('break_elapsed_to_completed')) {
+          if (applied.includes('focus_elapsed_to_completed')) {
             history = [...state.history, buildHistoryRecord(next, 'completed')];
           }
           return { session: next, history };
@@ -201,13 +204,24 @@ export const useSessionStore = create<SessionSlice>()(
       },
 
       skipBreak: () => {
+        // Transitions to break_complete so the user still has to explicitly
+        // tap "Start next focus" — same screen as a naturally-ended break.
+        set((state) => {
+          const { session } = state;
+          if (session.state !== 'break_active') return state;
+          return { session: { ...session, state: 'break_complete' }, backgroundedAt: null };
+        });
+        void NotificationService.cancelAllPulsarNotifications();
+      },
+
+      startNextFocus: () => {
         const prev = get().session;
-        if (prev.state !== 'break_active') return;
+        if (prev.state !== 'break_complete') return;
         const next = createFocusSession(Date.now(), {
           focusDurationMs: prev.focusDurationMs,
           breakDurationMs: prev.breakDurationMs,
           plannedCycles: prev.plannedCycles,
-          currentCycle: Math.min(prev.currentCycle + 1, prev.plannedCycles),
+          currentCycle: prev.currentCycle + 1,
           presetId: prev.presetId,
         });
         set({ session: next, backgroundedAt: null });
