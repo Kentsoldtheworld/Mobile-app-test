@@ -11,7 +11,8 @@ import { useSessionStore } from '@/src/features/session/state/sessionStore';
 import { colors, radii, space } from '@/src/theme/tokens';
 
 // ─── constants ───────────────────────────────────────────────────────────────
-const PRESET_ORDER: PresetId[] = ['frequent', 'balanced', 'minimal'];
+/** Chips shown on this screen. `study` stays in PRESETS for easy re-enable. */
+const PRESET_ORDER: PresetId[] = ['flow', 'deepwork', 'mercy'];
 const CYCLES_MIN = 1;
 const CYCLES_MAX = 8;
 const BLOCK_MIN = 8;  // px — square size at small counts
@@ -90,7 +91,7 @@ function SessionGrid({ focusMin, breakMin, cycles }: { focusMin: number; breakMi
         </View>
         {cycles > 1 && (
           <Text style={s.legendTotal}>
-            {focusMin * cycles}m focus · {breakMin * cycles}m break total
+            {focusMin * cycles}m focus · {breakMin * (cycles - 1)}m break total
           </Text>
         )}
       </View>
@@ -105,7 +106,7 @@ export default function ModesScreen() {
 
   const [focusMin, setFocusMin] = useState(20);
   const [breakMin, setBreakMin] = useState(5);
-  const [cycles, setCycles] = useState(1);
+  const [cycles, setCycles] = useState(2);
 
   const activePreset = matchPreset(focusMin, breakMin);
 
@@ -119,7 +120,7 @@ export default function ModesScreen() {
     router.replace('/session');
   };
 
-  const totalMin = (focusMin + breakMin) * cycles;
+  const totalMin = focusMin * cycles + breakMin * Math.max(0, cycles - 1);
   const startLabel = `Start ${formatTotalTime(totalMin)} session`;
 
   return (
@@ -140,7 +141,7 @@ export default function ModesScreen() {
                   onPress={() => applyPreset(id)}
                   style={({ pressed }) => [s.chip, sel && s.chipSel, pressed && s.chipPress]}>
                   <Text style={[s.chipTxt, sel && s.chipTxtSel]}>
-                    {PRESETS[id].label.replace(' breaks', '')}
+                    {PRESETS[id].label}
                   </Text>
                 </Pressable>
               );
@@ -154,7 +155,7 @@ export default function ModesScreen() {
             label="Focus"
             value={focusMin}
             min={5}
-            max={60}
+            max={90}
             step={5}
             onChange={setFocusMin}
           />
@@ -162,7 +163,7 @@ export default function ModesScreen() {
             label="Break"
             value={breakMin}
             min={5}
-            max={60}
+            max={90}
             step={5}
             onChange={setBreakMin}
           />
