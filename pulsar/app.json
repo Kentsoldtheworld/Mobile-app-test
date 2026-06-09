@@ -37,6 +37,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b05d8d0c-6dbe-4bdc-8cb7-e4fa119f708a"
+      }
+    },
+    "owner": "kenthoselton"
   }
 }

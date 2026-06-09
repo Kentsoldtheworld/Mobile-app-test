@@ -97,6 +97,38 @@ function SkipBreakOverlay({ onKeepResting, onSkip }: { onKeepResting: () => void
 // e.g. 3 cycles → F B F B F  (3 focus, 2 breaks)
 import type { PulsarSession } from '@/src/features/session/domain/types';
 
+// ── Interstitial countdown ────────────────────────────────────────────────────
+const INTERSTITIAL_SECS = 120;
+
+function formatCountdown(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function useAutoExpire(durationSec: number, onExpire: () => void, active: boolean): number {
+  const [secondsLeft, setSecondsLeft] = useState(durationSec);
+  const callbackRef = useRef(onExpire);
+  callbackRef.current = onExpire;
+
+  useEffect(() => {
+    setSecondsLeft(durationSec);
+    if (!active) return;
+    let remaining = durationSec;
+    const id = setInterval(() => {
+      remaining -= 1;
+      setSecondsLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(id);
+        callbackRef.current();
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [active, durationSec]);
+
+  return secondsLeft;
+}
+
 const BLOCK_MS = 5 * 60 * 1000;
 const BLOCK_GAP = 3;
 
@@ -211,6 +243,27 @@ export default function SessionScreen() {
 
   const lastRecord = history.length > 0 ? history[history.length - 1] : null;
 
+  const handleInterstitialExpire = useRef(() => {
+    resetSessionToIdle();
+    router.replace('/');
+  });
+  handleInterstitialExpire.current = () => {
+    resetSessionToIdle();
+    router.replace('/');
+  };
+
+  const focusCompleteSecsLeft = useAutoExpire(
+    INTERSTITIAL_SECS,
+    () => handleInterstitialExpire.current(),
+    session.state === 'focus_complete',
+  );
+
+  const breakCompleteSecsLeft = useAutoExpire(
+    INTERSTITIAL_SECS,
+    () => handleInterstitialExpire.current(),
+    session.state === 'break_complete',
+  );
+
   const [confirmExit, setConfirmExit] = useState(false);
   const [confirmBreakExit, setConfirmBreakExit] = useState(false);
   const [confirmSkipBreak, setConfirmSkipBreak] = useState(false);
@@ -301,7 +354,7 @@ export default function SessionScreen() {
             </View>
             <View style={s.bottomCTA}>
               <PrimaryButton
-                title="Start break"
+                title={`Start break  ${formatCountdown(focusCompleteSecsLeft)}`}
                 icon={<Coffee size={18} weight="duotone" color={colors.background} />}
                 onPress={startBreak}
                 style={s.breakBtn}
@@ -377,7 +430,7 @@ export default function SessionScreen() {
             </View>
             <View style={s.bottomCTA}>
               <PrimaryButton
-                title="Start next focus"
+                title={`Start next focus  ${formatCountdown(breakCompleteSecsLeft)}`}
                 icon={<Lightning size={18} weight="duotone" color={colors.background} />}
                 onPress={startNextFocus}
               />
